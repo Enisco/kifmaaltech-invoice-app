@@ -25,6 +25,16 @@ const newItem = () => ({
 
 const todayString = () => new Date().toLocaleDateString("en-GB"); // dd/mm/yyyy
 
+// Convert between display format (dd/mm/yyyy) and <input type="date"> format (yyyy-mm-dd)
+const toInputDate = (d: string) => {
+  const [day, month, year] = d.split("/");
+  return year && month && day ? `${year}-${month}-${day}` : "";
+};
+const fromInputDate = (d: string) => {
+  const [year, month, day] = d.split("-");
+  return year && month && day ? `${day}/${month}/${year}` : "";
+};
+
 export default function Page() {
   const [data, setData] = useState<InvoiceData>({
     invoiceNumber: "",
@@ -86,12 +96,22 @@ export default function Page() {
         if (it.id !== id) return it;
         if (field === "unitPrice") {
           const unitPrice = parseAmount(value);
-          const effectiveQty = it.qty && Number(it.qty) > 0 ? Number(it.qty) : 1;
-          return { ...it, unitPriceInput: value, unitPrice, amount: effectiveQty * unitPrice };
+          const effectiveQty =
+            it.qty && Number(it.qty) > 0 ? Number(it.qty) : 1;
+          return {
+            ...it,
+            unitPriceInput: value,
+            unitPrice,
+            amount: effectiveQty * unitPrice,
+          };
         }
         if (field === "qty") {
           const effectiveQty = value && Number(value) > 0 ? Number(value) : 1;
-          return { ...it, qty: value, amount: effectiveQty * (it.unitPrice ?? 0) };
+          return {
+            ...it,
+            qty: value,
+            amount: effectiveQty * (it.unitPrice ?? 0),
+          };
         }
         return { ...it, [field]: value };
       }),
@@ -120,9 +140,148 @@ export default function Page() {
     });
 
   // --- print / pdf ---
+  // copyStyles:false skips trying to load the Next.js CSS bundle (which
+  // fails cross-origin on mobile dev). pageStyle is self-contained CSS that
+  // covers every class used in InvoicePreview, so the PDF always renders
+  // correctly regardless of network / dev-server restrictions.
   const handlePrint = useReactToPrint({
     content: () => printRef.current,
     documentTitle: data.invoiceNumber || "invoice",
+    copyStyles: false,
+    pageStyle: String.raw`
+      @page { size: A4; margin: 4mm 14mm; }
+      *, *::before, *::after {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0; padding: 0; background: #fff;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        color: #0C1A12; -webkit-font-smoothing: antialiased;
+      }
+      table { border-collapse: collapse; }
+      img { display: block; }
+
+      /* Custom non-Tailwind utilities */
+      .tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+      .panel-grid {
+        background-image:
+          linear-gradient(rgba(255,255,255,0.14) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,0.14) 1px, transparent 1px);
+        background-size: 22px 14px;
+      }
+      .print-area { position: static; box-shadow: none; border: none; margin: 0; padding: 0; width: 100%; max-width: 100%; }
+      .shadow-soft { box-shadow: none; }
+
+      /* Colours (from tailwind.config.ts) */
+      .bg-forest  { background-color: #0B3D2E; }
+      .bg-panel   { background-color: #ffffff; }
+      .text-white { color: #ffffff; }
+      .text-ink   { color: #0C1A12; }
+      .text-muted { color: #6E7B72; }
+      .text-solar { color: #F5A524; }
+      .text-white\/75 { color: rgba(255,255,255,0.75); }
+      .text-white\/65 { color: rgba(255,255,255,0.65); }
+      .text-white\/60 { color: rgba(255,255,255,0.60); }
+      .text-white\/90 { color: rgba(255,255,255,0.90); }
+      .border-forest { border-color: #0B3D2E; }
+      .border-line   { border-color: #E7E2D6; }
+
+      /* Layout */
+      .relative { position: relative; }
+      .absolute { position: absolute; }
+      .inset-0  { top: 0; right: 0; bottom: 0; left: 0; }
+      .overflow-hidden { overflow: hidden; }
+      .flex    { display: flex; }
+      .grid    { display: grid; }
+      .block   { display: block; }
+      .items-start  { align-items: flex-start; }
+      .items-center { align-items: center; }
+      .items-end    { align-items: flex-end; }
+      .justify-between { justify-content: space-between; }
+      .justify-end     { justify-content: flex-end; }
+      .shrink-0 { flex-shrink: 0; }
+      .gap-2 { gap: 0.5rem; }
+      .gap-3 { gap: 0.75rem; }
+      .gap-6 { gap: 1.5rem; }
+      .grid-cols-1 { grid-template-columns: 1fr; }
+      .grid-cols-2 { grid-template-columns: 1fr 1fr; }
+      @media (min-width: 640px) {
+        .sm\:grid-cols-2 { grid-template-columns: 1fr 1fr; }
+        .sm\:text-right  { text-align: right; }
+      }
+      .w-full { width: 100%; }
+      .w-12   { width: 3rem; }
+      .w-32   { width: 8rem; }
+      .w-36   { width: 9rem; }
+      .w-44   { width: 11rem; }
+      .h-16   { height: 4rem; }
+      .max-w-xs      { max-width: 20rem; }
+      .max-w-\[820px\] { max-width: 820px; }
+      .mx-auto { margin-left: auto; margin-right: auto; }
+      .space-y-1 > * + * { margin-top: 0.25rem; }
+
+      /* Spacing */
+      .px-4  { padding-left: 1rem;    padding-right: 1rem; }
+      .px-8  { padding-left: 2rem;    padding-right: 2rem; }
+      .py-2  { padding-top: 0.5rem;   padding-bottom: 0.5rem; }
+      .py-2\.5 { padding-top: 0.625rem; padding-bottom: 0.625rem; }
+      .py-3  { padding-top: 0.75rem;  padding-bottom: 0.75rem; }
+      .py-4  { padding-top: 1rem;     padding-bottom: 1rem; }
+      .py-6  { padding-top: 1.5rem;   padding-bottom: 1.5rem; }
+      .pt-4  { padding-top: 1rem; }
+      .pr-3  { padding-right: 0.75rem; }
+      .mt-1  { margin-top: 0.25rem; }
+      .mt-1\.5 { margin-top: 0.375rem; }
+      .mt-0\.5 { margin-top: 0.125rem; }
+      .mt-3  { margin-top: 0.75rem; }
+      .mt-5  { margin-top: 1.25rem; }
+      .mt-7  { margin-top: 1.75rem; }
+      .mt-8  { margin-top: 2rem; }
+      .mb-1  { margin-bottom: 0.25rem; }
+
+      /* Typography */
+      .font-mono { font-family: ui-monospace, 'Cascadia Code', monospace; }
+      .text-xl  { font-size: 1.25rem;  line-height: 1.75rem; }
+      .text-2xl { font-size: 1.5rem;   line-height: 2rem; }
+      .text-lg  { font-size: 1.125rem; line-height: 1.75rem; }
+      .text-sm  { font-size: 0.875rem; line-height: 1.25rem; }
+      .text-\[13px\] { font-size: 13px; }
+      .text-\[12px\] { font-size: 12px; }
+      .text-\[11px\] { font-size: 11px; }
+      .text-\[10px\] { font-size: 10px; }
+      .font-500 { font-weight: 500; }
+      .font-600 { font-weight: 600; }
+      .font-700 { font-weight: 700; }
+      .leading-snug    { line-height: 1.375; }
+      .leading-relaxed { line-height: 1.625; }
+      .leading-tight   { line-height: 1.25; }
+      .tracking-tight       { letter-spacing: -0.025em; }
+      .tracking-\[0\.2em\]  { letter-spacing: 0.2em; }
+      .tracking-\[0\.18em\] { letter-spacing: 0.18em; }
+      .tracking-\[0\.16em\] { letter-spacing: 0.16em; }
+      .tracking-\[0\.14em\] { letter-spacing: 0.14em; }
+      .uppercase       { text-transform: uppercase; }
+      .italic          { font-style: italic; }
+      .whitespace-pre-line { white-space: pre-line; }
+      .text-left   { text-align: left; }
+      .text-right  { text-align: right; }
+      .text-center { text-align: center; }
+
+      /* Borders */
+      .border-b   { border-bottom-width: 1px; border-bottom-style: solid; }
+      .border-b-2 { border-bottom-width: 2px; border-bottom-style: solid; }
+      .border-t   { border-top-width: 1px; border-top-style: solid; border-top-color: #E7E2D6; }
+      .border-collapse { border-collapse: collapse; }
+      .rounded-lg { border-radius: 0.5rem; }
+
+      /* Misc */
+      .opacity-50  { opacity: 0.5; }
+      .align-top   { vertical-align: top; }
+      .object-contain { object-fit: contain; }
+      .translate-x-8  { transform: translateX(2rem); }
+    `,
   });
 
   // --- save / load ---
@@ -152,7 +311,8 @@ export default function Page() {
       ...it,
       id: idCounter++,
       unitPrice: it.unitPrice ?? 0,
-      unitPriceInput: it.unitPriceInput ?? (it.unitPrice ? String(it.unitPrice) : ""),
+      unitPriceInput:
+        it.unitPriceInput ?? (it.unitPrice ? String(it.unitPrice) : ""),
     }));
     setData({ ...record, items: items.length ? items : [newItem()] });
     setShowRecents(false);
@@ -258,10 +418,15 @@ export default function Page() {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] font-600 uppercase tracking-[0.16em] text-muted">
+                  <label className="text-[10px] font-600 uppercase tracking-[0.16em] text-muted">
                     Date
-                  </p>
-                  <p className="tnum font-mono text-sm text-ink">{data.date}</p>
+                  </label>
+                  <input
+                    type="date"
+                    value={toInputDate(data.date)}
+                    onChange={(e) => onField("date", fromInputDate(e.target.value))}
+                    className="tnum mt-0.5 block cursor-pointer bg-transparent font-mono text-sm text-ink outline-none hover:text-forest"
+                  />
                 </div>
               </div>
 
@@ -286,7 +451,10 @@ export default function Page() {
               <div className="rounded-xl bg-zinc-100 py-2">
                 <div
                   ref={previewContainerRef}
-                  style={{ height: invoiceHeight || undefined, overflow: "hidden" }}
+                  style={{
+                    height: invoiceHeight || undefined,
+                    overflow: "hidden",
+                  }}
                 >
                   <div
                     ref={invoiceContentRef}

@@ -2,6 +2,7 @@
 
 import { formatNaira } from "@/lib/format";
 import { amountToWords } from "@/lib/numberToWords";
+import { SIGNATURE_B64 } from "@/lib/signature";
 import type { InvoiceData } from "@/lib/storage";
 import { forwardRef } from "react";
 
@@ -168,7 +169,7 @@ const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(
             </p>
             <div className="text-right">
               <img
-                src="/signature.png"
+                src={SIGNATURE_B64}
                 alt="Authorized signature"
                 className="mb-1 h-16 w-44 object-contain translate-x-8"
               />

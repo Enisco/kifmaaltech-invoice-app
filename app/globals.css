@@ -46,6 +46,14 @@ body {
     margin: 4mm 14mm;
   }
 
+  /* Force all backgrounds, colors and images to print exactly as on screen. */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   body {
     background: #fff !important;
   }
